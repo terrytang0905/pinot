@@ -35,7 +35,7 @@ import com.linkedin.pinot.core.operator.transform.TransformExpressionOperator;
 import com.linkedin.pinot.core.plan.DocIdSetPlanNode;
 import com.linkedin.pinot.core.query.aggregation.groupby.AggregationGroupByTrimmingService;
 import com.linkedin.pinot.core.query.aggregation.groupby.GroupKeyGenerator;
-import com.linkedin.pinot.core.query.aggregation.groupby.NoDictionaryGroupKeyGenerator;
+import com.linkedin.pinot.core.query.aggregation.groupby.NoDictionaryMultiColumnGroupKeyGenerator;
 import com.linkedin.pinot.core.segment.creator.impl.SegmentIndexCreationDriverImpl;
 import com.linkedin.pinot.core.segment.index.loader.Loaders;
 import java.io.File;
@@ -52,7 +52,7 @@ import org.testng.annotations.Test;
 
 
 /**
- * Unit test for {@link NoDictionaryGroupKeyGenerator}
+ * Unit test for {@link NoDictionaryMultiColumnGroupKeyGenerator}
  */
 public class NoDictionaryGroupKeyGeneratorTest {
   private static final String SEGMENT_DIR_NAME = System.getProperty("java.io.tmpdir") + File.separator + "rawIndexPerf";
@@ -62,7 +62,7 @@ public class NoDictionaryGroupKeyGeneratorTest {
 
   /**
    * This test builds a segment with two columns, one without dictionary, and the other with dictionary.
-   * It then uses {@link NoDictionaryGroupKeyGenerator} to ensure that all group keys are generated correctly.
+   * It then uses {@link NoDictionaryMultiColumnGroupKeyGenerator} to ensure that all group keys are generated correctly.
    *
    * @throws Exception
    */
@@ -74,9 +74,6 @@ public class NoDictionaryGroupKeyGeneratorTest {
     // Load the segment.
     File segment = new File(SEGMENT_DIR_NAME, SEGMENT_NAME);
     IndexSegment indexSegment = Loaders.IndexSegment.load(segment, ReadMode.heap);
-
-    // Build the group key generator.
-    GroupKeyGenerator groupKeyGenerator = new NoDictionaryGroupKeyGenerator(indexSegment.getColumnNames());
 
     // Build the data source map
     Map<String, BaseOperator> dataSourceMap = new HashMap<>();
@@ -97,11 +94,17 @@ public class NoDictionaryGroupKeyGeneratorTest {
     TransformBlock transformBlock;
     int[] docIdToGroupKeys = new int[DocIdSetPlanNode.MAX_DOC_PER_CALL];
 
+    GroupKeyGenerator groupKeyGenerator = null;
     while ((transformBlock = (TransformBlock) transformOperator.nextBlock()) != null) {
+      if (groupKeyGenerator == null) {
+        // Build the group key generator.
+        groupKeyGenerator = new NoDictionaryMultiColumnGroupKeyGenerator(transformBlock, indexSegment.getColumnNames());
+      }
       groupKeyGenerator.generateKeysForBlock(transformBlock, docIdToGroupKeys);
     }
 
     // Assert total number of group keys is as expected
+    Assert.assertTrue(groupKeyGenerator != null);
     Assert.assertEquals(groupKeyGenerator.getCurrentGroupKeyUpperBound(), expectedGroupKeys.size(),
         "Number of group keys mis-match.");
 
